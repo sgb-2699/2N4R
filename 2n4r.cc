@@ -1,80 +1,98 @@
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
-#include "ns3/point-to-point-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/netanim-module.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/csma-module.h"
+#include "ns3/mobility-module.h"
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE("CN_FIFTH");
+NS_LOG_COMPONENT_DEFINE("P2P-CSMA");
 
-int main(int argc, char *argv[]) {
-    LogComponentEnable("CN_FIFTH", LOG_LEVEL_INFO);
+int main() {
+	LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_INFO);
+    LogComponentEnable("UdpEchoClientApplication", LOG_LEVEL_INFO);
 
-    NodeContainer nodes;
-    nodes.Create(6);
+	NodeContainer p2pNodes;
+	p2pNodes.Create(1);
 
-    PointToPointHelper p2p;
-    p2p.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
-    p2p.SetChannelAttribute("Delay", StringValue("2ms"));
+	NodeContainer csmaNodes;
+	csmaNodes.Create(4);
 
-    NetDeviceContainer devices1 = p2p.Install(nodes.Get(0), nodes.Get(1));
-    NetDeviceContainer devices2 = p2p.Install(nodes.Get(1), nodes.Get(2));
-    NetDeviceContainer devices3 = p2p.Install(nodes.Get(2), nodes.Get(3));
-    NetDeviceContainer devices4 = p2p.Install(nodes.Get(3), nodes.Get(4));
-    NetDeviceContainer devices5 = p2p.Install(nodes.Get(4), nodes.Get(5));
+	NodeContainer bridgeNode;
+	bridgeNode.Create(1);
 
-    InternetStackHelper internet;
-    internet.Install(nodes);
+	PointToPointHelper pointToPoint;
+	pointToPoint.SetDeviceAttribute("DataRate", StringValue("5Mbps"));
+	pointToPoint.SetChannelAttribute("Delay", StringValue("2ms"));
 
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces1 = address.Assign(devices1);
+	NodeContainer p2pDevices;
+	p2pDevices.Add(p2pNodes.Get(0));
+	p2pDevices.Add(bridgeNode.Get(0));
 
-    address.SetBase("10.1.2.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces2 = address.Assign(devices2);
+	NetDeviceContainer p2pDevice;
+	p2pDevice = pointToPoint.Install(p2pDevices);
 
-    address.SetBase("10.1.3.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces3 = address.Assign(devices3);
+	CsmaHelper csma;
+	csma.SetChannelAttribute("DataRate", StringValue("100Mbps"));
+	csma.SetChannelAttribute("Delay", TimeValue(NanoSeconds(6500)));
 
-    address.SetBase("10.1.4.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces4 = address.Assign(devices4);
+	NodeContainer csmaDevices;
+	csmaDevices.Add(bridgeNode.Get(0));
+	csmaDevices.Add(csmaNodes);
 
-    address.SetBase("10.1.5.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces5 = address.Assign(devices5);
+	NetDeviceContainer csmaDevice;
+	csmaDevice = csma.Install(csmaDevices);
 
-    uint16_t port = 9;
-    UdpEchoServerHelper echoServer(port);
-    ApplicationContainer serverApps = echoServer.Install(nodes.Get(5));
-    serverApps.Start(Seconds(1.0));
-    serverApps.Stop(Seconds(10.0));
+	InternetStackHelper stack;
+	stack.Install(p2pNodes);
+	stack.Install(csmaNodes);
+	stack.Install(bridgeNode);
 
-    UdpEchoClientHelper echoClient(interfaces5.GetAddress(1), port);
-    echoClient.SetAttribute("MaxPackets", UintegerValue(10));
-    echoClient.SetAttribute("Interval", TimeValue(Seconds(1.0)));
-    echoClient.SetAttribute("PacketSize", UintegerValue(1024));
-    ApplicationContainer clientApps = echoClient.Install(nodes.Get(0));
-    clientApps.Start(Seconds(2.0));
-    clientApps.Stop(Seconds(10.0));
+	Ipv4AddressHelper address;
 
-    Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+	address.SetBase("10.1.1.0", "255.255.255.0");
+	Ipv4InterfaceContainer p2pInterface = address.Assign(p2pDevice);
 
-    AnimationInterface anim("Fifth.xml");
-    anim.SetConstantPosition(nodes.Get(0), 50.0, 0.0);
-    anim.SetConstantPosition(nodes.Get(1), 50.0, 20.0);
-    anim.SetConstantPosition(nodes.Get(2), 50.0, 40.0);
-    anim.SetConstantPosition(nodes.Get(3), 50.0, 60.0);
-    anim.SetConstantPosition(nodes.Get(4), 50.0, 80.0);
-    anim.SetConstantPosition(nodes.Get(5), 50.0, 100.0);
+	address.SetBase("10.1.2.0", "255.255.255.0");
+	Ipv4InterfaceContainer csmaInterface = address.Assign(csmaDevice);
 
-    AsciiTraceHelper ascii;
-    p2p.EnableAsciiAll(ascii.CreateFileStream("Fifth.tr"));
-    p2p.EnablePcapAll("network-simulation");
+	UdpEchoServerHelper echoServer(9);
+	ApplicationContainer serverApps = echoServer.Install(csmaNodes.Get(0)); 
+	serverApps.Start(Seconds(1.0));
+	serverApps.Stop(Seconds(10.0));
 
-    Simulator::Stop(Seconds(11.0));
-    Simulator::Run();
-    Simulator::Destroy();
+	UdpEchoClientHelper echoClient(csmaInterface.GetAddress(1), 9);
+	echoClient.SetAttribute("PacketSize", UintegerValue(1024));
+	echoClient.SetAttribute("MaxPackets", UintegerValue(10));
+	echoClient.SetAttribute("Interval", TimeValue(Seconds(1.0)));
 
-    return 0;
+	ApplicationContainer clientApps = echoClient.Install(p2pDevices.Get(0));
+	clientApps.Start(Seconds(2.0));
+	clientApps.Stop(Seconds(10.0));
+
+	Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+	AsciiTraceHelper ascii;
+	pointToPoint.EnableAsciiAll(ascii.CreateFileStream("p2p-trace-pg6.tr"));
+	csma.EnableAsciiAll(ascii.CreateFileStream("csma-trace-pg6.tr"));
+
+	pointToPoint.EnablePcapAll("p2p");
+	csma.EnablePcapAll("csma");
+
+	AnimationInterface anim("p2p-csma-four-nodes.xml");
+	anim.SetConstantPosition(p2pNodes.Get(0), 0, 50);
+	anim.SetConstantPosition(bridgeNode.Get(0), 20, 50);
+
+	for(uint32_t i = 0; i < csmaNodes.GetN(); i++) {
+		anim.SetConstantPosition(csmaNodes.Get(i), 40 + i*20, 50);
+	}
+
+	Simulator::Stop(Seconds(10.0));
+	Simulator::Run();
+	Simulator::Destroy();
+
+	return 0;
 }
