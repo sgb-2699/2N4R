@@ -13,7 +13,7 @@ NS_LOG_COMPONENT_DEFINE("P2P-CSMA");
 
 int main() {
 	LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_INFO);
-    LogComponentEnable("UdpEchoClientApplication", LOG_LEVEL_INFO);
+        LogComponentEnable("UdpEchoClientApplication", LOG_LEVEL_INFO);
 
 	NodeContainer p2pNodes;
 	p2pNodes.Create(1);
